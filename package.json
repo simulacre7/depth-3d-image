@@ -10,8 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@pixi/filter-displacement": "^7.4.2",
-    "pixi.js": "^8.6.4",
+    "@pixi/core": "^7.2.5",
+    "@pixi/filter-displacement": "^7.2.5",
+    "pixi.js": "^7.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
