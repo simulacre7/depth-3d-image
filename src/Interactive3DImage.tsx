@@ -7,6 +7,7 @@ interface Interactive3DImageProps {
   depthMap: string; // Depth map 이미지 경로
   width?: number; // 외부에서 전달받은 이미지 너비
   height?: number; // 외부에서 전달받은 이미지 높이
+  intensity?: number; // 반응 강도 (기본값 10)
 }
 
 const Interactive3DImage: React.FC<Interactive3DImageProps> = ({
@@ -14,6 +15,7 @@ const Interactive3DImage: React.FC<Interactive3DImageProps> = ({
   depthMap,
   width,
   height,
+  intensity = 10,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -21,73 +23,71 @@ const Interactive3DImage: React.FC<Interactive3DImageProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const app = new Application({
-      view: canvas, // PixiJS에서 사용할 canvas 전달
-      width: width || 100, // 임시값, 이미지 크기 계산 후 업데이트
-      height: height || 100, // 임시값
-      backgroundAlpha: 0,
-      resolution: window.devicePixelRatio || 1,
-      autoDensity: true,
-    });
+    const loadImagesAndSetup = async () => {
+      try {
+        const imgTexture = await Texture.fromURL(image);
+        const depthMapTexture = await Texture.fromURL(depthMap);
 
-    const loadImages = async () => {
-      const imgTexture = await Texture.fromURL(image);
-      const depthMapTexture = await Texture.fromURL(depthMap);
+        const imgWidth = width || imgTexture.width;
+        const imgHeight = height || imgTexture.height;
 
-      const img = new Sprite(imgTexture);
-      const depthMapSprite = new Sprite(depthMapTexture);
+        // PixiJS Application 생성
+        const app = new Application({
+          view: canvas,
+          width: imgWidth,
+          height: imgHeight,
+          backgroundAlpha: 0,
+          resolution: window.devicePixelRatio || 1,
+          autoDensity: true,
+        });
 
-      // 이미지 크기 추출 또는 외부 값 사용
-      const imgWidth = width || imgTexture.width;
-      const imgHeight = height || imgTexture.height;
+        const img = new Sprite(imgTexture);
+        const depthMapSprite = new Sprite(depthMapTexture);
 
-      // 이미지와 Depth map 크기 설정
-      img.width = imgWidth;
-      img.height = imgHeight;
+        // 이미지와 Depth map 크기 설정
+        img.width = imgWidth;
+        img.height = imgHeight;
 
-      depthMapSprite.width = imgWidth;
-      depthMapSprite.height = imgHeight;
+        depthMapSprite.width = imgWidth;
+        depthMapSprite.height = imgHeight;
 
-      // Displacement 필터 적용
-      const displacementFilter = new DisplacementFilter(depthMapSprite);
+        // Displacement 필터 적용
+        const displacementFilter = new DisplacementFilter(depthMapSprite);
 
-      // PixiJS 스테이지 구성
-      app.renderer.resize(imgWidth, imgHeight);
-      app.stage.addChild(img);
-      app.stage.addChild(depthMapSprite);
-      app.stage.filters = [displacementFilter];
+        // PixiJS 스테이지 구성
+        app.stage.addChild(img);
+        app.stage.addChild(depthMapSprite);
+        app.stage.filters = [displacementFilter];
 
-      // 마우스 이동 이벤트
-      const handleMouseMove = (e: MouseEvent) => {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        // 페이지 전체에서 마우스 위치 추적
+        const handleMouseMove = (e: MouseEvent) => {
+          const mouseX = e.clientX / window.innerWidth; // 0 ~ 1로 정규화된 X 좌표
+          const mouseY = e.clientY / window.innerHeight; // 0 ~ 1로 정규화된 Y 좌표
 
-        displacementFilter.scale.x = (imgWidth / 2 - mouseX) / 20;
-        displacementFilter.scale.y = (imgHeight / 2 - mouseY) / 20;
-      };
+          // 정규화된 좌표를 이미지 크기에 맞게 스케일링
+          const scaledX = (mouseX - 0.5) * imgWidth; // 중앙 기준으로 좌표 변환
+          const scaledY = (mouseY - 0.5) * imgHeight;
 
-      canvas.addEventListener('mousemove', handleMouseMove);
+          displacementFilter.scale.x = scaledX / intensity;
+          displacementFilter.scale.y = scaledY / intensity;
+        };
 
-      return () => {
-        canvas.removeEventListener('mousemove', handleMouseMove);
-        app.destroy(true, { children: true });
-      };
+        window.addEventListener('mousemove', handleMouseMove);
+
+        // 컴포넌트 제거 시 이벤트 리스너 제거 및 PixiJS 인스턴스 제거
+        return () => {
+          window.removeEventListener('mousemove', handleMouseMove);
+          app.destroy(true, { children: true });
+        };
+      } catch (error) {
+        console.error('Error loading images:', error);
+      }
     };
 
-    loadImages().catch((error) => {
-      console.error('Error loading images:', error);
-    });
-  }, [image, depthMap, width, height]);
+    loadImagesAndSetup();
+  }, [image, depthMap, width, height, intensity]);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        display: 'block',
-      }}
-    />
-  );
+  return <canvas ref={canvasRef} />;
 };
 
 export default Interactive3DImage;
